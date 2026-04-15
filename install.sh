@@ -4,13 +4,26 @@ set -euo pipefail
 # ============================================================
 #  claude-bar installer
 # ============================================================
-GITHUB_OWNER="BOUSHABAMohammed"
-GITHUB_REPO="claude-bar"
+DEFAULT_GITHUB_OWNER="BOUSHABAMohammed"
+DEFAULT_GITHUB_REPO="claude-bar"
+# Set CLAUDE_BAR_GITHUB_REPO=owner/repo when republishing from an independent repository.
+if [[ -n "${CLAUDE_BAR_GITHUB_REPO:-}" ]]; then
+    GITHUB_OWNER="${CLAUDE_BAR_GITHUB_REPO%%/*}"
+    GITHUB_REPO="${CLAUDE_BAR_GITHUB_REPO##*/}"
+else
+    GITHUB_OWNER="$DEFAULT_GITHUB_OWNER"
+    GITHUB_REPO="$DEFAULT_GITHUB_REPO"
+fi
 # ============================================================
 
 VERSION="${1:-latest}"
 INSTALL_DIR="$HOME/.local/share/claude-bar"
 LAUNCHAGENT_PLIST="$HOME/Library/LaunchAgents/com.user.claude-bar.plist"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LOCAL_CHECKOUT=0
+if [[ -f "$SCRIPT_DIR/claude_bar.py" && -f "$SCRIPT_DIR/pyproject.toml" ]]; then
+    LOCAL_CHECKOUT=1
+fi
 
 # --- Terminal colours ---
 GREEN='\033[0;32m'
@@ -24,9 +37,12 @@ warn() { echo -e "${YELLOW}Warning:${NC} $*"; }
 die()  { echo -e "\n${RED}Error:${NC} $*" >&2; exit 1; }
 
 # ============================================================
-# 1. Resolve version
+# 1. Resolve version or local source
 # ============================================================
-if [[ "$VERSION" == "latest" ]]; then
+if [[ "$LOCAL_CHECKOUT" == "1" ]]; then
+    VERSION="local"
+    step "Using local checkout from ${SCRIPT_DIR}"
+elif [[ "$VERSION" == "latest" ]]; then
     step "Resolving latest release..."
     VERSION=$(
         curl -fsSL \
@@ -60,24 +76,35 @@ else
 fi
 
 # ============================================================
-# 4. Download release tarball
+# 4. Populate install directory
 # ============================================================
 step "Installing claude-bar ${VERSION} to ${INSTALL_DIR}..."
+rm -rf "$INSTALL_DIR"
 mkdir -p "$INSTALL_DIR"
 
-TARBALL_URL="https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/archive/refs/tags/${VERSION}.tar.gz"
-TMP_TARBALL=$(mktemp /tmp/claude-bar-XXXXXX.tar.gz)
-trap 'rm -f "$TMP_TARBALL"' EXIT
+if [[ "$LOCAL_CHECKOUT" == "1" ]]; then
+    echo "   Copying current workspace..."
+    tar \
+        --exclude='.git' \
+        --exclude='.venv' \
+        --exclude='__pycache__' \
+        --exclude='.pytest_cache' \
+        --exclude='.mypy_cache' \
+        -cf - \
+        -C "$SCRIPT_DIR" . \
+    | tar -xf - -C "$INSTALL_DIR"
+else
+    TARBALL_URL="https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/archive/refs/tags/${VERSION}.tar.gz"
+    TMP_TARBALL=$(mktemp /tmp/claude-bar-XXXXXX.tar.gz)
+    trap 'rm -f "$TMP_TARBALL"' EXIT
 
-echo "   Downloading ${TARBALL_URL}..."
-curl -fsSL "$TARBALL_URL" -o "$TMP_TARBALL" \
-    || die "Download failed. Verify that version ${VERSION} exists at:\n   https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases"
+    echo "   Downloading ${TARBALL_URL}..."
+    curl -fsSL "$TARBALL_URL" -o "$TMP_TARBALL" \
+        || die "Download failed. Verify that version ${VERSION} exists at:\n   https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases"
 
-# ============================================================
-# 5. Extract (strip GitHub's REPO-VERSION/ prefix)
-# ============================================================
-echo "   Extracting..."
-tar -xzf "$TMP_TARBALL" -C "$INSTALL_DIR" --strip-components=1
+    echo "   Extracting..."
+    tar -xzf "$TMP_TARBALL" -C "$INSTALL_DIR" --strip-components=1
+fi
 
 # ============================================================
 # 6. Strip Gatekeeper quarantine (prevents "unidentified developer" block)
@@ -95,12 +122,13 @@ step "Installing Python dependencies..."
 # 8. Write run.sh into the install directory
 # ============================================================
 step "Writing run.sh..."
-cat > "$INSTALL_DIR/run.sh" << 'RUNEOF'
+cat > "$INSTALL_DIR/run.sh" << RUNEOF
 #!/usr/bin/env bash
 # Launcher for claude-bar — do not edit INSTALL_DIR directly,
 # re-run the installer to update.
-cd "$HOME/.local/share/claude-bar"
-exec .venv/bin/python claude_bar.py "$@"
+cd "\$HOME/.local/share/claude-bar"
+export CLAUDE_BAR_GITHUB_REPO="\${CLAUDE_BAR_GITHUB_REPO:-${GITHUB_OWNER}/${GITHUB_REPO}}"
+exec .venv/bin/python claude_bar.py "\$@"
 RUNEOF
 chmod +x "$INSTALL_DIR/run.sh"
 
@@ -108,9 +136,12 @@ chmod +x "$INSTALL_DIR/run.sh"
 # 9. Optional: install LaunchAgent (start at login)
 # ============================================================
 echo ""
-AUTOSTART="n"
-# </dev/tty forces read to use the terminal even when the script is piped through bash
-read -r -p "Start claude-bar automatically at login? [y/N] " AUTOSTART </dev/tty || true
+AUTOSTART="${CLAUDE_BAR_AUTOSTART:-}"
+if [[ -z "$AUTOSTART" ]]; then
+    AUTOSTART="n"
+    # </dev/tty forces read to use the terminal even when the script is piped through bash
+    read -r -p "Start claude-bar automatically at login? [y/N] " AUTOSTART </dev/tty || true
+fi
 if [[ "$AUTOSTART" == "y" || "$AUTOSTART" == "Y" ]]; then
     step "Installing LaunchAgent..."
     mkdir -p "$HOME/Library/LaunchAgents"
@@ -175,7 +206,9 @@ echo ""
 echo "Run it now:"
 echo "   $INSTALL_DIR/run.sh"
 echo ""
-echo "To uninstall:"
-echo "   launchctl unload ~/Library/LaunchAgents/com.user.claude-bar.plist 2>/dev/null || true"
-echo "   rm -rf ~/.local/share/claude-bar ~/Library/LaunchAgents/com.user.claude-bar.plist"
+echo "Install with start-at-login enabled:"
+echo "   CLAUDE_BAR_AUTOSTART=y ./install.sh"
+echo ""
+echo "To uninstall from this checkout:"
+echo "   ./uninstall.sh"
 echo ""
