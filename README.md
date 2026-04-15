@@ -1,6 +1,6 @@
 # Claude + Codex Bar
 
-Compact macOS menu bar app for Claude and Codex usage. It shows Codex on the left, Claude on the right, with stacked `5h` and weekly percentages.
+Compact macOS menu bar app for Claude and Codex usage. It shows Codex on the left, Claude on the right, with stacked `5h` and `7d` percentages.
 
 ![](image-1.png)
 
