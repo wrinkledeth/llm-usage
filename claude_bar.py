@@ -287,7 +287,8 @@ class ClaudeBar(rumps.App):
             provider_specs(self._codex_snapshot, self._claude_snapshot),
             self._show_summary,
         )
-        self._status_view.setFrame_(((0.0, max(0.0, (button_height - height) / 2)), (width, height)))
+        status_view_y = max(0.0, (button_height - height) / 2)
+        self._status_view.setFrame_(((0.0, status_view_y), (width, height)))
         status_item.setLength_(width)
         self.title = None
         button.setNeedsDisplay_(True)

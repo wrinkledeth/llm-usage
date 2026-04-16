@@ -12,6 +12,7 @@ from AppKit import (
     NSImage,
     NSImageScaleProportionallyUpOrDown,
     NSImageView,
+    NSStatusBar,
     NSView,
 )
 
@@ -19,16 +20,18 @@ from usage_models import ProviderUsageSnapshot
 
 CLAUDE_ICON_PATH = pathlib.Path(__file__).parent / "icons8-claude-ai-96.png"
 CODEX_ICON_PATH = pathlib.Path(__file__).parent / "openai-codex-icon.svg"
-STATUS_HEIGHT = 18.0
-ICON_BOX_WIDTH = 13.0
-ICON_DRAW_SIZE = 12.5
+# Match the actual menu bar thickness so the stacked text can be centered
+# within the full control instead of getting clipped against a shorter view.
+STATUS_HEIGHT = NSStatusBar.systemStatusBar().thickness()
+ICON_BOX_WIDTH = 14.75
+ICON_DRAW_SIZE = 14.25
 ICON_TOP_OFFSET = 2.75
 TEXT_GAP = 1.5
 PROVIDER_GAP = 6.0
 SIDE_PADDING = 2.0
-TOP_TEXT_Y = 8.2
-BOTTOM_TEXT_Y = 0.0
-VALUE_FONT = NSFont.monospacedDigitSystemFontOfSize_weight_(9.6, 0.3)
+TOP_TEXT_Y = 9.25
+BOTTOM_TEXT_Y = -0.5
+VALUE_FONT = NSFont.monospacedDigitSystemFontOfSize_weight_(10.0, 0.3)
 _CLAUDE_ICON: NSImage | None = None
 _CODEX_ICON: NSImage | None = None
 
