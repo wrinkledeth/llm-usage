@@ -123,23 +123,19 @@ def _coerce_datetime(value) -> datetime.datetime | None:
 
 
 def fmt_reset(value) -> str:
-    """Format time remaining until reset as '2h 44m'."""
+    """Format time remaining until reset as '2h 23m' or '1d 7h' for longer periods."""
     dt = _coerce_datetime(value)
     if dt is None:
         return "unknown"
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
     total_secs = max(0, int((dt - datetime.datetime.now(timezone.utc)).total_seconds()))
-    hours, rem = divmod(total_secs, 3600)
-    return f"{hours}h {rem // 60:02d}m"
-
-
-def fmt_date(value) -> str:
-    """Format reset date as local day + time."""
-    dt = _coerce_datetime(value)
-    if dt is None:
-        return "unknown"
-    return dt.astimezone().strftime("%a %b %d %H:%M")
+    days, rem = divmod(total_secs, 86400)
+    hours, rem = divmod(rem, 3600)
+    minutes = rem // 60
+    if days > 0:
+        return f"{days}d {hours}h"
+    return f"{hours}h {minutes:02d}m"
 
 
 def _as_float(value, default: float | None = None) -> float | None:
@@ -205,7 +201,6 @@ class ClaudeBar(rumps.App):
         self._github_repo = resolve_github_repo(REPO_ROOT)
         self._build_menu_items()
         self._init_state()
-        self._update_toggle_label()
         self._apply_section_headers()
         self.update_item.hidden = True
         self._refresh(None)
@@ -213,23 +208,22 @@ class ClaudeBar(rumps.App):
         rumps.Timer(self._start_update_check, UPDATE_CHECK_DELAY_SECS).start()
 
     def _build_menu_items(self):
-        self.codex_hdr = rumps.MenuItem("◆ Codex")
-        self.codex_session_row = rumps.MenuItem("  …")
-        self.codex_weekly_row = rumps.MenuItem("  …")
-        self.codex_detail_row = rumps.MenuItem("  …")
+        self.codex_hdr = self._display_item("◆ Codex")
+        self.codex_session_row = self._display_item("  …")
+        self.codex_weekly_row = self._display_item("  …")
+        self.codex_detail_row = self._display_item("  …")
 
-        self.claude_hdr = rumps.MenuItem("◆ Claude")
-        self.claude_session_row = rumps.MenuItem("  …")
-        self.claude_weekly_row = rumps.MenuItem("  …")
-        self.claude_detail_row = rumps.MenuItem("  …")
+        self.claude_hdr = self._display_item("◆ Claude")
+        self.claude_session_row = self._display_item("  …")
+        self.claude_weekly_row = self._display_item("  …")
+        self.claude_detail_row = self._display_item("  …")
 
-        self.refresh_btn = rumps.MenuItem("  ⟳ Refresh Now", callback=self.on_refresh)
-        self.summary_toggle = rumps.MenuItem("", callback=self.on_toggle_summary)
-        self.last_item = rumps.MenuItem("  Last updated: —")
+        self.refresh_btn = rumps.MenuItem("Refresh", callback=self.on_refresh)
         self.update_item = rumps.MenuItem("  Update available", callback=self.on_open_update)
-        self.version_item = rumps.MenuItem(f"  v{VERSION}")
 
         self.menu = [
+            self.refresh_btn,
+            None,
             self.codex_hdr,
             self.codex_session_row,
             self.codex_weekly_row,
@@ -240,13 +234,14 @@ class ClaudeBar(rumps.App):
             self.claude_weekly_row,
             self.claude_detail_row,
             None,
-            self.summary_toggle,
-            self.refresh_btn,
-            self.last_item,
-            None,
             self.update_item,
-            self.version_item,
         ]
+
+    def _display_item(self, title: str) -> rumps.MenuItem:
+        return rumps.MenuItem(title, callback=self._noop_display_item)
+
+    def _noop_display_item(self, _):
+        pass
 
     def _init_state(self):
         self._session: requests.Session | None = None
@@ -262,8 +257,8 @@ class ClaudeBar(rumps.App):
         self.claude_detail_row.hidden = True
 
     def _apply_section_headers(self):
-        set_menu_title(self.codex_hdr, make_section_header("Codex"))
-        set_menu_title(self.claude_hdr, make_section_header("Claude"))
+        set_menu_title(self.codex_hdr, make_section_header("Codex", ColorKey.CODEX_ACCENT))
+        set_menu_title(self.claude_hdr, make_section_header("Claude", ColorKey.CLAUDE_ACCENT))
 
     def _setup_status_item(self, timer):
         timer.stop()
@@ -308,20 +303,11 @@ class ClaudeBar(rumps.App):
         status_item.setImage_(NSImage.alloc().init())
         status_item.setTitle_("")
 
-    def _update_toggle_label(self):
-        mark = "✓" if self._show_summary else "  "
-        self.summary_toggle.title = f"  {mark} Show stacked % in status bar"
-
     def on_refresh(self, _):
         self._refresh(None)
 
     def on_open_update(self, _):
         subprocess.Popen(["open", self._update_url])
-
-    def on_toggle_summary(self, _):
-        self._show_summary = not self._show_summary
-        self._update_toggle_label()
-        self._refresh_status_item()
 
     @rumps.timer(REFRESH_INTERVAL)
     def _auto_refresh(self, _):
@@ -394,19 +380,14 @@ class ClaudeBar(rumps.App):
             session_row=self.codex_session_row,
             weekly_row=self.codex_weekly_row,
             detail_row=self.codex_detail_row,
+            accent_color_key=ColorKey.CODEX_ACCENT,
         )
         self._render_provider_snapshot(
             snapshot=claude_snapshot,
             session_row=self.claude_session_row,
             weekly_row=self.claude_weekly_row,
             detail_row=self.claude_detail_row,
-        )
-        set_menu_title(
-            self.last_item,
-            make_plain(
-                f"  Last updated {datetime.datetime.now():%H:%M:%S}",
-                ColorKey.LAST_UPDATED,
-            ),
+            accent_color_key=ColorKey.CLAUDE_ACCENT,
         )
         self._refresh_status_item()
 
@@ -416,6 +397,7 @@ class ClaudeBar(rumps.App):
         session_row: rumps.MenuItem,
         weekly_row: rumps.MenuItem,
         detail_row: rumps.MenuItem,
+        accent_color_key: ColorKey,
     ):
         self._render_window_row(
             session_row,
@@ -423,6 +405,7 @@ class ClaudeBar(rumps.App):
             label="5h",
             is_weekly=False,
             failed=bool(snapshot.error),
+            accent_color_key=accent_color_key,
         )
         self._render_window_row(
             weekly_row,
@@ -430,6 +413,7 @@ class ClaudeBar(rumps.App):
             label="7d",
             is_weekly=True,
             failed=bool(snapshot.error),
+            accent_color_key=accent_color_key,
         )
 
         if snapshot.error:
@@ -452,22 +436,24 @@ class ClaudeBar(rumps.App):
         label: str,
         is_weekly: bool,
         failed: bool,
+        accent_color_key: ColorKey,
     ):
         if window and window.percent is not None:
-            suffix = self._window_suffix(window, label, is_weekly)
-            set_menu_title(row_item, make_progress_row(window.percent, suffix))
+            suffix = self._window_suffix(window, is_weekly)
+            set_menu_title(
+                row_item,
+                make_progress_row(window.percent, suffix, accent_color_key, prefix=label),
+            )
             return
 
         color = ColorKey.ERROR if failed else ColorKey.LAST_UPDATED
         set_menu_title(row_item, make_plain(f"  {label} unavailable", color))
 
-    def _window_suffix(self, window: UsageWindowSnapshot, label: str, is_weekly: bool) -> str:
-        if is_weekly:
-            return f"  {label} resets {fmt_date(window.resets_at)}"
+    def _window_suffix(self, window: UsageWindowSnapshot, is_weekly: bool) -> str:
         reset_text = fmt_reset(window.resets_at)
         if reset_text == "unknown":
-            return f"  {label} starts when a message is sent"
-        return f"  {label} resets in {reset_text}"
+            reset_text = "unknown" if is_weekly else "idle"
+        return f"  {reset_text:>7}"
 
     def _credits_text(self, credits: CreditsSnapshot) -> str:
         if credits.kind == "codex_balance":
