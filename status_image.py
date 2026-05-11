@@ -23,15 +23,15 @@ CODEX_ICON_PATH = pathlib.Path(__file__).parent / "openai-codex-icon.svg"
 # Match the actual menu bar thickness so the stacked text can be centered
 # within the full control instead of getting clipped against a shorter view.
 STATUS_HEIGHT = NSStatusBar.systemStatusBar().thickness()
-ICON_BOX_WIDTH = 14.75
+ICON_BOX_WIDTH = 14.25
 ICON_DRAW_SIZE = 14.25
 ICON_TOP_OFFSET = 2.75
-TEXT_GAP = 1.5
-PROVIDER_GAP = 6.0
-SIDE_PADDING = 2.0
+TEXT_GAP = 1.0
+PROVIDER_GAP = 3.0
+SIDE_PADDING = 1.0
 TOP_TEXT_Y = 9.25
 BOTTOM_TEXT_Y = -0.5
-VALUE_FONT = NSFont.monospacedDigitSystemFontOfSize_weight_(10.0, 0.3)
+VALUE_FONT = NSFont.monospacedDigitSystemFontOfSize_weight_(9.5, 0.0)
 _CLAUDE_ICON: NSImage | None = None
 _CODEX_ICON: NSImage | None = None
 
