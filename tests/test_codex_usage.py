@@ -100,6 +100,46 @@ class CodexUsageTests(unittest.TestCase):
         self.assertIsNone(snapshot.session)
         self.assertEqual(snapshot.weekly.percent, 7.0)
 
+    def test_map_codex_oauth_snapshot_splits_five_day_long_window(self):
+        snapshot = map_codex_oauth_snapshot(
+            {
+                "rate_limit": {
+                    "primary_window": {
+                        "used_percent": 22,
+                        "reset_at": 1766948068,
+                        "limit_window_seconds": 18000,
+                    },
+                    "secondary_window": {
+                        "used_percent": 43,
+                        "reset_at": 1767370312,
+                        "limit_window_seconds": 5 * 24 * 60 * 60,
+                    },
+                }
+            }
+        )
+
+        self.assertEqual(snapshot.session.percent, 22.0)
+        self.assertEqual(snapshot.weekly.percent, 43.0)
+        self.assertEqual(snapshot.weekly.window_seconds, 5 * 24 * 60 * 60)
+
+    def test_map_codex_oauth_snapshot_treats_five_day_only_window_as_weekly(self):
+        snapshot = map_codex_oauth_snapshot(
+            {
+                "rate_limit": {
+                    "primary_window": {
+                        "used_percent": 7,
+                        "reset_at": 1775295893,
+                        "limit_window_seconds": 5 * 24 * 60 * 60,
+                    },
+                    "secondary_window": None,
+                }
+            }
+        )
+
+        self.assertIsNone(snapshot.session)
+        self.assertEqual(snapshot.weekly.percent, 7.0)
+        self.assertEqual(snapshot.weekly.window_seconds, 5 * 24 * 60 * 60)
+
 
 if __name__ == "__main__":
     unittest.main()

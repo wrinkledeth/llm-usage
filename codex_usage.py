@@ -511,14 +511,14 @@ def _split_codex_windows(
 
     for window in present:
         seconds = window.window_seconds or 0
-        if seconds >= 6 * 24 * 60 * 60:
-            weekly = window
-        elif seconds and seconds <= 8 * 60 * 60:
+        if seconds and seconds <= 8 * 60 * 60:
             session = window
+        elif seconds:
+            weekly = window
 
     if len(present) == 1:
         only = present[0]
-        if only.window_seconds and only.window_seconds >= 6 * 24 * 60 * 60:
+        if only.window_seconds and only.window_seconds > 8 * 60 * 60:
             weekly = only
             session = None
         else:

@@ -402,7 +402,7 @@ class ClaudeBar(rumps.App):
         self._render_window_row(
             session_row,
             snapshot.session,
-            label="5h",
+            label=self._window_label(snapshot.session, "5h"),
             is_weekly=False,
             failed=bool(snapshot.error),
             accent_color_key=accent_color_key,
@@ -410,7 +410,7 @@ class ClaudeBar(rumps.App):
         self._render_window_row(
             weekly_row,
             snapshot.weekly,
-            label="7d",
+            label=self._window_label(snapshot.weekly, "7d"),
             is_weekly=True,
             failed=bool(snapshot.error),
             accent_color_key=accent_color_key,
@@ -455,6 +455,21 @@ class ClaudeBar(rumps.App):
             reset_text = "unknown" if is_weekly else "idle"
         return f"  {reset_text:>7}"
 
+    def _window_label(self, window: UsageWindowSnapshot | None, fallback: str) -> str:
+        if not window or not window.window_seconds:
+            return fallback
+        seconds = window.window_seconds
+        day = 24 * 60 * 60
+        hour = 60 * 60
+        minute = 60
+        if seconds >= day:
+            return _compact_duration(seconds / day, "d")
+        if seconds >= hour:
+            return _compact_duration(seconds / hour, "h")
+        if seconds >= minute:
+            return _compact_duration(seconds / minute, "m")
+        return fallback
+
     def _credits_text(self, credits: CreditsSnapshot) -> str:
         if credits.kind == "codex_balance":
             if credits.unlimited:
@@ -467,6 +482,12 @@ class ClaudeBar(rumps.App):
         limit = credits.limit or 0.0
         utilization = credits.utilization or 0.0
         return f"  Extra usage: ${used:.2f} of ${limit:,.0f} ({utilization:.2f}%)"
+
+
+def _compact_duration(value: float, suffix: str) -> str:
+    if value.is_integer():
+        return f"{int(value)}{suffix}"
+    return f"{value:.1f}".rstrip("0").rstrip(".") + suffix
 
 
 def main():
