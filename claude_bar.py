@@ -10,12 +10,13 @@ import threading
 import urllib.request
 from datetime import timezone
 
-import rookiepy
 import rumps
 from AppKit import NSImage
 from curl_cffi import requests
 from PyObjCTools.AppHelper import callAfter
 
+from claude_cookie import get_claude_session_cookie
+from claude_usage import load_claude_cli_snapshot
 from codex_usage import load_codex_snapshot
 from color_utils import (
     ColorKey,
@@ -34,7 +35,6 @@ REPO_ROOT = pathlib.Path(__file__).parent
 REFRESH_INTERVAL = 300
 STATUS_SETUP_DELAY_SECS = 0.5
 UPDATE_CHECK_DELAY_SECS = 5.0
-COOKIE_NAMES = ("sessionKey", "__Secure-next-auth.session-token")
 BROWSERS = ("chrome", "safari", "firefox", "brave", "edge")
 
 # Set to False to show only the provider icons in the menu bar.
@@ -66,12 +66,9 @@ def check_for_update(github_repo: str) -> tuple[str, str] | None:
 def get_session_cookie(browser: str):
     """Return (name, value) for the first matching claude.ai session cookie."""
     try:
-        loader = getattr(rookiepy, browser)
-        for cookie in loader(["claude.ai"]):
-            if cookie["name"] in COOKIE_NAMES:
-                return cookie["name"], cookie["value"]
+        return get_claude_session_cookie(browser)
     except Exception as exc:
-        print(f"[claude_bar] {browser}: {type(exc).__name__}")
+        print(f"[claude_bar] {browser}: {type(exc).__name__}: {exc}", flush=True)
     return None, None
 
 
@@ -351,16 +348,30 @@ class ClaudeBar(rumps.App):
                 self._refreshing = False
 
     def _load_claude_snapshot(self) -> ProviderUsageSnapshot:
+        cli_error = None
+        if self._browser is None:
+            try:
+                return load_claude_cli_snapshot()
+            except Exception as exc:
+                cli_error = exc
+                print(
+                    f"[claude_bar] Claude CLI usage failed: {type(exc).__name__}: {exc}",
+                    flush=True,
+                )
+
         try:
             self._ensure_claude_session()
             data = fetch_usage(self._session, self._org_id)
             return build_claude_snapshot(data)
         except Exception as exc:
             response = getattr(exc, "response", None)
-            if response is not None and response.status_code == 401:
+            if response is not None and response.status_code in (401, 403):
                 self._session = None
                 self._org_id = None
-            return ProviderUsageSnapshot.error_state("claude", "Claude", _format_error(exc))
+            error = _format_error(exc)
+            if cli_error is not None:
+                error = f"{_format_error(cli_error)}; browser fallback failed: {error}"
+            return ProviderUsageSnapshot.error_state("claude", "Claude", error)
 
     def _load_codex_snapshot(self) -> ProviderUsageSnapshot:
         try:

@@ -145,6 +145,7 @@ fi
 if [[ "$AUTOSTART" == "y" || "$AUTOSTART" == "Y" ]]; then
     step "Installing LaunchAgent..."
     mkdir -p "$HOME/Library/LaunchAgents"
+    launchctl unload "$LAUNCHAGENT_PLIST" 2>/dev/null || true
 
     cat > "$LAUNCHAGENT_PLIST" << EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -180,7 +181,7 @@ if [[ "$AUTOSTART" == "y" || "$AUTOSTART" == "Y" ]]; then
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
-        <string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <string>/opt/homebrew/bin:${HOME}/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
         <key>HOME</key>
         <string>${HOME}</string>
     </dict>
@@ -194,6 +195,7 @@ if [[ "$AUTOSTART" == "y" || "$AUTOSTART" == "Y" ]]; then
 EOF
 
     launchctl load "$LAUNCHAGENT_PLIST"
+    launchctl kickstart -k "gui/$(id -u)/com.user.claude-bar"
     echo "   LaunchAgent installed and loaded — claude-bar will start at login."
 fi
 

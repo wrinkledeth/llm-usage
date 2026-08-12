@@ -30,7 +30,8 @@ launchctl unload ~/Library/LaunchAgents/com.user.claude-bar.plist
 ~/.local/share/claude-bar/run.sh
 ```
 
-Force a browser with `~/.local/share/claude-bar/run.sh --browser firefox`.
+Claude Code authentication is used by default. Force the browser-cookie fallback with
+`~/.local/share/claude-bar/run.sh --browser firefox`.
 
 For development:
 
@@ -47,7 +48,8 @@ uv sync --frozen --no-dev
 
 ## Security
 
-- Claude usage is fetched with your local `claude.ai` session cookie from a supported browser profile.
+- Claude usage is fetched from the authenticated Claude Code CLI's zero-token
+  `/usage` command. A local `claude.ai` browser session is retained as a fallback.
 - Codex usage is fetched from local Codex auth in `~/.codex/auth.json` or `$CODEX_HOME/auth.json`, with `codex app-server` fallback when needed.
 - Credentials stay local and are only used to call Claude/OpenAI endpoints directly.
 

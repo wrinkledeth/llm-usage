@@ -5,6 +5,7 @@ import json
 import os
 import pathlib
 import select
+import shutil
 import subprocess
 import urllib.error
 import urllib.request
@@ -20,6 +21,7 @@ TOKEN_REFRESH_INTERVAL = dt.timedelta(days=8)
 TOKEN_REFRESH_URL = "https://auth.openai.com/oauth/token"
 TOKEN_REFRESH_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
 CODEX_RPC_ARGS = ["-s", "read-only", "-a", "untrusted", "app-server"]
+CODEX_CLI_PATH_ENV = "CODEX_CLI_PATH"
 
 
 class CodexUsageError(RuntimeError):
@@ -116,10 +118,10 @@ def save_credentials(credentials: CodexCredentials, env: dict[str, str] | None =
         except Exception:
             existing = {}
 
-    tokens = {
-        "access_token": credentials.access_token,
-        "refresh_token": credentials.refresh_token,
-    }
+    existing_tokens = existing.get("tokens")
+    tokens = dict(existing_tokens) if isinstance(existing_tokens, dict) else {}
+    tokens["access_token"] = credentials.access_token
+    tokens["refresh_token"] = credentials.refresh_token
     if credentials.id_token:
         tokens["id_token"] = credentials.id_token
     if credentials.account_id:
@@ -150,7 +152,6 @@ def refresh_credentials(credentials: CodexCredentials) -> CodexCredentials:
                 "client_id": TOKEN_REFRESH_CLIENT_ID,
                 "grant_type": "refresh_token",
                 "refresh_token": credentials.refresh_token,
-                "scope": "openid profile email",
             }
         ).encode(),
         method="POST",
@@ -248,7 +249,7 @@ def map_codex_oauth_snapshot(data: dict[str, Any]) -> ProviderUsageSnapshot:
 
 
 def map_codex_rpc_snapshot(_account_payload: dict[str, Any], rate_limits_payload: dict[str, Any]) -> ProviderUsageSnapshot:
-    limits = rate_limits_payload.get("rateLimits")
+    limits = _select_rpc_rate_limits(rate_limits_payload)
     if not isinstance(limits, dict):
         raise CodexRPCError("Codex app-server returned no rate limits.")
 
@@ -319,7 +320,7 @@ def fetch_rpc_snapshot(env: dict[str, str] | None = None) -> tuple[dict[str, Any
     client = _CodexRPCClient(env=env or dict(os.environ))
     try:
         client.initialize()
-        account_payload = client.request("account/read")
+        account_payload = client.request("account/read", {})
         rate_limits_payload = client.request("account/rateLimits/read")
         return account_payload, rate_limits_payload
     finally:
@@ -330,7 +331,7 @@ class _CodexRPCClient:
     def __init__(self, env: dict[str, str], timeout: float = 10.0):
         self.timeout = timeout
         self.process = subprocess.Popen(
-            ["codex", *CODEX_RPC_ARGS],
+            [_resolve_codex_executable(env), *CODEX_RPC_ARGS],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -347,12 +348,18 @@ class _CodexRPCClient:
         self.notify("initialized")
 
     def notify(self, method: str, params: dict[str, Any] | None = None) -> None:
-        self._send({"method": method, "params": params or {}})
+        payload: dict[str, Any] = {"method": method}
+        if params is not None:
+            payload["params"] = params
+        self._send(payload)
 
     def request(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         request_id = self._next_id
         self._next_id += 1
-        self._send({"id": request_id, "method": method, "params": params or {}})
+        payload: dict[str, Any] = {"id": request_id, "method": method}
+        if params is not None:
+            payload["params"] = params
+        self._send(payload)
 
         while True:
             message = self._read_message()
@@ -499,6 +506,17 @@ def _window_from_rpc_payload(raw: Any) -> UsageWindowSnapshot | None:
     )
 
 
+def _select_rpc_rate_limits(payload: dict[str, Any]) -> dict[str, Any] | None:
+    limits_by_id = payload.get("rateLimitsByLimitId")
+    if isinstance(limits_by_id, dict):
+        codex_limits = limits_by_id.get("codex")
+        if isinstance(codex_limits, dict):
+            return codex_limits
+
+    legacy_limits = payload.get("rateLimits")
+    return legacy_limits if isinstance(legacy_limits, dict) else None
+
+
 def _split_codex_windows(
     windows: list[UsageWindowSnapshot | None],
 ) -> tuple[UsageWindowSnapshot | None, UsageWindowSnapshot | None]:
@@ -506,37 +524,53 @@ def _split_codex_windows(
     if not present:
         return None, None
 
-    session: UsageWindowSnapshot | None = None
-    weekly: UsageWindowSnapshot | None = None
-
-    for window in present:
-        seconds = window.window_seconds or 0
-        if seconds and seconds <= 8 * 60 * 60:
-            session = window
-        elif seconds:
-            weekly = window
-
     if len(present) == 1:
         only = present[0]
         if only.window_seconds and only.window_seconds > 8 * 60 * 60:
-            weekly = only
-            session = None
-        else:
-            session = only
-            weekly = None
-        return session, weekly
+            return None, only
+        return only, None
 
-    if session is None or weekly is None:
-        sorted_windows = sorted(
-            present,
-            key=lambda window: window.window_seconds if window.window_seconds is not None else 0,
-        )
-        session = session or sorted_windows[0]
-        weekly = weekly or sorted_windows[-1]
-        if session is weekly:
-            weekly = None
+    known = [window for window in present if window.window_seconds]
+    unknown = [window for window in present if not window.window_seconds]
+    if len(known) >= 2:
+        ordered = sorted(known, key=lambda window: window.window_seconds or 0)
+        return ordered[0], ordered[-1]
 
-    return session, weekly
+    if len(known) == 1:
+        known_window = known[0]
+        other = unknown[0]
+        if (known_window.window_seconds or 0) <= 8 * 60 * 60:
+            return known_window, other
+        return other, known_window
+
+    return present[0], present[-1]
+
+
+def _resolve_codex_executable(env: dict[str, str]) -> str:
+    search_path = env.get("PATH", "")
+    override = (env.get(CODEX_CLI_PATH_ENV) or "").strip()
+    if override:
+        resolved = shutil.which(override, path=search_path)
+        if resolved:
+            return resolved
+        raise CodexRPCError(f"Codex CLI not found at {override}.")
+
+    resolved = shutil.which("codex", path=search_path)
+    if resolved:
+        return resolved
+
+    home = pathlib.Path(env.get("HOME") or pathlib.Path.home())
+    for candidate in (
+        pathlib.Path("/opt/homebrew/bin/codex"),
+        pathlib.Path("/usr/local/bin/codex"),
+        home / ".local" / "bin" / "codex",
+    ):
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
+
+    raise CodexRPCError(
+        f"Codex CLI not found. Set {CODEX_CLI_PATH_ENV} or install Codex in PATH."
+    )
 
 
 def _epoch_to_datetime(raw: Any) -> dt.datetime | None:

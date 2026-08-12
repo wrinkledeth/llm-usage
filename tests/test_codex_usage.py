@@ -1,6 +1,19 @@
+import json
+import pathlib
+import tempfile
 import unittest
+from unittest import mock
 
-from codex_usage import map_codex_oauth_snapshot, parse_auth_data, resolve_usage_url
+from codex_usage import (
+    CodexCredentials,
+    _CodexRPCClient,
+    _resolve_codex_executable,
+    map_codex_oauth_snapshot,
+    map_codex_rpc_snapshot,
+    parse_auth_data,
+    resolve_usage_url,
+    save_credentials,
+)
 
 
 class CodexUsageTests(unittest.TestCase):
@@ -139,6 +152,121 @@ class CodexUsageTests(unittest.TestCase):
         self.assertIsNone(snapshot.session)
         self.assertEqual(snapshot.weekly.percent, 7.0)
         self.assertEqual(snapshot.weekly.window_seconds, 5 * 24 * 60 * 60)
+
+    def test_map_codex_oauth_snapshot_keeps_window_with_missing_duration(self):
+        snapshot = map_codex_oauth_snapshot(
+            {
+                "rate_limit": {
+                    "primary_window": {
+                        "used_percent": 22,
+                        "reset_at": 1766948068,
+                        "limit_window_seconds": 18000,
+                    },
+                    "secondary_window": {
+                        "used_percent": 43,
+                        "reset_at": 1767407914,
+                    },
+                }
+            }
+        )
+
+        self.assertEqual(snapshot.session.percent, 22.0)
+        self.assertEqual(snapshot.weekly.percent, 43.0)
+        self.assertIsNone(snapshot.weekly.window_seconds)
+
+    def test_map_codex_oauth_snapshot_orders_reversed_windows_by_duration(self):
+        snapshot = map_codex_oauth_snapshot(
+            {
+                "rate_limit": {
+                    "primary_window": {
+                        "used_percent": 43,
+                        "reset_at": 1767407914,
+                        "limit_window_seconds": 604800,
+                    },
+                    "secondary_window": {
+                        "used_percent": 22,
+                        "reset_at": 1766948068,
+                        "limit_window_seconds": 18000,
+                    },
+                }
+            }
+        )
+
+        self.assertEqual(snapshot.session.percent, 22.0)
+        self.assertEqual(snapshot.weekly.percent, 43.0)
+
+    def test_map_codex_rpc_snapshot_prefers_canonical_codex_bucket(self):
+        snapshot = map_codex_rpc_snapshot(
+            {},
+            {
+                "rateLimits": {
+                    "primary": {"usedPercent": 91, "windowDurationMins": 300},
+                    "secondary": {"usedPercent": 92, "windowDurationMins": 10080},
+                },
+                "rateLimitsByLimitId": {
+                    "codex": {
+                        "primary": {"usedPercent": 31, "windowDurationMins": 300},
+                        "secondary": {"usedPercent": 42, "windowDurationMins": 10080},
+                    },
+                    "codex_other": {
+                        "primary": {"usedPercent": 77, "windowDurationMins": 60},
+                    },
+                },
+            },
+        )
+
+        self.assertEqual(snapshot.session.percent, 31.0)
+        self.assertEqual(snapshot.weekly.percent, 42.0)
+
+    def test_rpc_request_omits_params_for_parameterless_method(self):
+        client = _CodexRPCClient.__new__(_CodexRPCClient)
+        client._next_id = 1
+        client._send = mock.Mock()
+        client._read_message = mock.Mock(return_value={"id": 1, "result": {}})
+
+        self.assertEqual(client.request("account/rateLimits/read"), {})
+        client._send.assert_called_once_with(
+            {"id": 1, "method": "account/rateLimits/read"}
+        )
+
+    @mock.patch("codex_usage.shutil.which", return_value="/custom/bin/codex")
+    def test_resolve_codex_executable_uses_configured_path(self, _which):
+        self.assertEqual(
+            _resolve_codex_executable(
+                {"PATH": "/custom/bin", "CODEX_CLI_PATH": "codex"}
+            ),
+            "/custom/bin/codex",
+        )
+
+    def test_save_credentials_preserves_unknown_token_fields(self):
+        with tempfile.TemporaryDirectory() as codex_home:
+            auth_path = pathlib.Path(codex_home) / "auth.json"
+            auth_path.write_text(
+                json.dumps(
+                    {
+                        "auth_mode": "chatgpt",
+                        "tokens": {
+                            "access_token": "old-access",
+                            "refresh_token": "old-refresh",
+                            "future_token_field": "keep-me",
+                        },
+                    }
+                )
+            )
+            save_credentials(
+                CodexCredentials(
+                    access_token="new-access",
+                    refresh_token="new-refresh",
+                    id_token=None,
+                    account_id=None,
+                    last_refresh=None,
+                ),
+                {"CODEX_HOME": codex_home},
+            )
+
+            saved = json.loads(auth_path.read_text())
+            self.assertEqual(saved["tokens"]["access_token"], "new-access")
+            self.assertEqual(saved["tokens"]["future_token_field"], "keep-me")
 
 
 if __name__ == "__main__":
