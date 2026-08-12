@@ -52,6 +52,20 @@ Current week: 2% used - resets Jan 2 at 3am (UTC)
         self.assertEqual(snapshot.session.resets_at.year, 2026)
         self.assertEqual(snapshot.weekly.resets_at.year, 2027)
 
+    def test_parse_claude_usage_text_accepts_zero_usage_without_resets(self):
+        usage_text = """You are currently using your subscription to power your Claude Code usage
+
+Current session: 0% used
+Current week (all models): 0% used
+"""
+
+        snapshot = parse_claude_usage_text(usage_text)
+
+        self.assertEqual(snapshot.session.percent, 0.0)
+        self.assertIsNone(snapshot.session.resets_at)
+        self.assertEqual(snapshot.weekly.percent, 0.0)
+        self.assertIsNone(snapshot.weekly.resets_at)
+
     def test_parse_claude_usage_text_rejects_missing_window(self):
         with self.assertRaisesRegex(ClaudeUsageError, "unexpected /usage format"):
             parse_claude_usage_text("Current session: 12% used")

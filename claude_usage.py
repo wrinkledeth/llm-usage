@@ -24,12 +24,12 @@ CLAUDE_USAGE_ARGS = (
     "/usage",
 )
 _SESSION_LINE = re.compile(
-    r"^Current session:\s*(?P<percent>\d+(?:\.\d+)?)% used\s*(?:\u00b7|-)\s*"
-    r"resets\s+(?P<reset>.+)$"
+    r"^Current session:\s*(?P<percent>\d+(?:\.\d+)?)% used"
+    r"(?:\s*(?:\u00b7|-)\s*resets\s+(?P<reset>.+))?$"
 )
 _WEEK_LINE = re.compile(
     r"^Current week(?: \(all models\))?:\s*(?P<percent>\d+(?:\.\d+)?)% used"
-    r"\s*(?:\u00b7|-)\s*resets\s+(?P<reset>.+)$"
+    r"(?:\s*(?:\u00b7|-)\s*resets\s+(?P<reset>.+))?$"
 )
 _RESET_TIME = re.compile(
     r"^(?P<date>[A-Z][a-z]{2} \d{1,2}(?:,? \d{4})?|Today|Tomorrow) at "
@@ -131,9 +131,10 @@ def _window_from_match(
     window_seconds: int,
     now: dt.datetime,
 ) -> UsageWindowSnapshot:
+    reset_text = match.group("reset")
     return UsageWindowSnapshot(
         percent=float(match.group("percent")),
-        resets_at=_parse_reset_time(match.group("reset"), now),
+        resets_at=_parse_reset_time(reset_text, now) if reset_text else None,
         window_seconds=window_seconds,
     )
 
