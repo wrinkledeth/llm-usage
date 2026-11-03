@@ -44,7 +44,7 @@ macapp run                                  # debug build + launch
 "/Applications/LLM Usage.app/Contents/MacOS/LLMUsage" --snapshot /tmp/shots   # render label + panel PNGs
 ```
 
-Version 2.0 replaced the earlier Python/rumps app (still in git history before `swift-native`).
+Version 2.0 replaced the earlier Python/rumps app (see git history before commit `1d40089`).
 It dropped the Claude browser-cookie fallback and the GitHub release check.
 
 ## Credits
