@@ -9,8 +9,7 @@
 - `uv sync --frozen --no-dev`: create the local virtualenv and install runtime dependencies.
 - `.venv/bin/python claude_bar.py`: launch the menu bar app directly for local development.
 - `.venv/bin/python -m unittest discover -s tests`: run the stdlib test suite.
-- `./install.sh`: preferred install/update path from a checked-out repo; deploys into `~/.local/share/claude-bar/` and prompts to install the LaunchAgent.
-- `./uninstall.sh`: stop the app, unload the LaunchAgent, and remove the installed files.
+- `macapp install`: install/update path; builds `LLM Usage.app` (native launcher in `Sources/LLMUsage` + the Python sources) into /Applications. The launcher syncs a venv from `uv.lock` and registers a login item.
 
 ## Coding Style & Naming Conventions
 - Use Python 3.12, 4-space indentation, and PEP 8 naming (`snake_case` for functions/modules, `CamelCase` for classes).
@@ -29,5 +28,4 @@
 ## Release & Repo Notes
 - This repo is published independently. Keep `origin` pointed at your repo and add the upstream project as `upstream` for syncs.
 - If you republish under a new slug, set `CLAUDE_BAR_GITHUB_REPO=owner/repo` so release checks point at the correct repository.
-- Prefer `./install.sh` and `./uninstall.sh` over ad hoc removal commands when validating install/remove behavior.
-- Prefer a local checkout plus `./install.sh` over remote `curl | bash`; keep the pipe-to-shell path as an optional release convenience only.
+- Validate install behavior with `macapp install` and the log at `~/Library/Logs/LLM Usage.log`.

@@ -1,4 +1,4 @@
-# Claude + Codex Bar
+# LLM Usage
 
 Compact macOS menu bar app for Claude and Codex usage. It shows Codex on the left, Claude on the right, with stacked `5h` and `7d` percentages.
 
@@ -6,47 +6,32 @@ Compact macOS menu bar app for Claude and Codex usage. It shows Codex on the lef
 
 ![](image-2.png)
 
-## Install
+## Instal## Install
 
 ```bash
-git clone git@github.com:wrinkledeth/claude-codex-bar.git
-cd claude-codex-bar
-./install.sh
+macapp install    # → /Applications/LLM Usage.app (shared tool, see macapp.conf)
 ```
 
-`./install.sh` will prompt to add `~/Library/LaunchAgents/com.user.claude-bar.plist` for start at login.
-`./uninstall.sh` unloads and removes it.
+`LLM Usage.app` is a small native launcher (`Sources/LLMUsage`) around the Python app.
+On launch it syncs a private venv with `uv.lock` (in `~/Library/Application Support/LLM
+Usage/venv`, only when the lock changes; needs `uv`), runs `claude_bar.py`, restarts it
+after a crash, and stops it when the app quits. It registers itself as a login item
+(toggle in System Settings › General › Login Items). Log: `~/Library/Logs/LLM Usage.log`.
 
-Manual control:
-
-```bash
-launchctl load ~/Library/LaunchAgents/com.user.claude-bar.plist
-launchctl unload ~/Library/LaunchAgents/com.user.claude-bar.plist
-```
-
-## Run
-
-```bash
-~/.local/share/claude-bar/run.sh
-```
-
-Claude Code authentication is used by default. Force the browser-cookie fallback with
-`~/.local/share/claude-bar/run.sh --browser firefox`.
+Claude Code authentication is used by default, with the browser-cookie fallback.
 
 For development:
 
 ```bash
 uv sync --frozen --no-dev
-.venv/bin/python claude_bar.py
+.venv/bin/python claude_bar.py            # --browser firefox forces the cookie fallback
 ```
 
 ## Remove
 
-```bash
-./uninstall.sh
-```
-
-## Security
+Quit it from its menu, turn it off in Login Items, and delete `/Applications/LLM Usage.app`
+(plus `~/Library/Application Support/LLM Usage` for the venv).
+ity
 
 - Claude usage is fetched from the authenticated Claude Code CLI's zero-token
   `/usage` command. A local `claude.ai` browser session is retained as a fallback.
