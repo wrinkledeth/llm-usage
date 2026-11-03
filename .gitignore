@@ -1,23 +1,6 @@
-# Python-generated files
-__pycache__/
-*.py[oc]
+.build/
 build/
-dist/
-wheels/
-*.egg-info
-.pytest_cache/
-.mypy_cache/
-
-# Virtual environments
-.venv/
-
-# Logs
 *.log
-
-# macOS / editor files
 .DS_Store
-.idea/
 .vscode/
 *.swp
-*.swo
-.build/

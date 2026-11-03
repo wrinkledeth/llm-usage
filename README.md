@@ -1,50 +1,56 @@
 # LLM Usage
 
-Compact macOS menu bar app for Codex, Claude and OpenCode Go usage, shown left to right with stacked `5h` and `7d` percentages. The dropdown also has OpenCode Go's monthly cap.
+Native macOS menu-bar app (Swift 6 / SwiftUI, macOS 26) showing subscription usage for
+**Codex**, **Claude** and **OpenCode Go**. Each provider gets its logo with the 5-hour window
+stacked over the weekly one; click for a panel with progress bars, reset countdowns, OpenCode
+Go's monthly cap and Codex credits. Right-click for Refresh / Quit.
 
-![](image-1.png)
+It refreshes every 5 minutes, after the Mac wakes, and when the panel opens with data older
+than a minute. A provider that isn't set up on this Mac is hidden; one that fails keeps its last
+reading (dimmed) and shows the error in the panel.
 
-![](image-2.png)
-
-## Instal## Install
-
-```bash
-macapp install    # → /Applications/LLM Usage.app (shared tool, see macapp.conf)
-```
-
-`LLM Usage.app` is a small native launcher (`Sources/LLMUsage`) around the Python app.
-On launch it syncs a private venv with `uv.lock` (in `~/Library/Application Support/LLM
-Usage/venv`, only when the lock changes; needs `uv`), runs `claude_bar.py`, restarts it
-after a crash, and stops it when the app quits. It registers itself as a login item
-(toggle in System Settings › General › Login Items). Log: `~/Library/Logs/LLM Usage.log`.
-
-Claude Code authentication is used by default, with the browser-cookie fallback.
-
-For development:
+## Install
 
 ```bash
-uv sync --frozen --no-dev
-.venv/bin/python claude_bar.py            # --browser firefox forces the cookie fallback
+macapp install    # → /Applications/LLM Usage.app
 ```
 
-## Remove
+It registers as a login item on first launch (toggle in the panel). Errors go to
+`~/Library/Logs/LLM Usage.log`.
 
-Quit it from its menu, turn it off in Login Items, and delete `/Applications/LLM Usage.app`
-(plus `~/Library/Application Support/LLM Usage` for the venv).
-ity
+If a per-app firewall such as LuLu is running, allow **LLM Usage** to connect out. Menu-bar
+managers (Thaw, Ice, Bartender) may put the item in their hidden section the first time.
 
-- Claude usage is fetched from the authenticated Claude Code CLI's zero-token
-  `/usage` command. A local `claude.ai` browser session is retained as a fallback.
-- Codex usage is fetched from local Codex auth in `~/.codex/auth.json` or `$CODEX_HOME/auth.json`, with `codex app-server` fallback when needed.
-- OpenCode Go usage comes from `https://opencode.ai/zen/go/v1/usage`, using the Go API key from
-  `OPENCODE_API_KEY`, Pi's `~/.pi/agent/auth.json`, or OpenCode's `~/.local/share/opencode/auth.json`
-  (`opencode-go` entry). Without a key the OpenCode Go section is hidden.
-- Credentials stay local and are only used to call Claude/OpenAI/OpenCode endpoints directly.
+## Where the numbers come from
+
+| Provider | Source | Credentials |
+|---|---|---|
+| Claude | `claude -p … /usage` (Claude Code CLI; uses no tokens) | the CLI's own login |
+| Codex | `chatgpt.com/backend-api/wham/usage`, falling back to `codex app-server` (`account/rateLimits/read`) | `~/.codex/auth.json` (or `$CODEX_HOME`); tokens are refreshed and written back like the CLI does |
+| OpenCode Go | `opencode.ai/zen/go/v1/usage` | `opencode-go` API key from `OPENCODE_API_KEY`, Pi's `~/.pi/agent/auth.json`, or OpenCode's `~/.local/share/opencode/auth.json` |
+
+`CLAUDE_CLI_PATH` / `CODEX_CLI_PATH` override where the CLIs are found (otherwise PATH plus
+`/opt/homebrew/bin`, `~/.local/bin`, `/usr/local/bin`). Credentials stay on this Mac and are only
+sent to the provider they belong to.
+
+## Develop
+
+```bash
+swift build
+./test.sh                                   # unit tests (Swift Testing)
+macapp run                                  # debug build + launch
+.build/debug/LLMUsage --print               # fetch every provider once and print
+.build/debug/LLMUsage --print --codex-app-server
+"/Applications/LLM Usage.app/Contents/MacOS/LLMUsage" --snapshot /tmp/shots   # render label + panel PNGs
+```
+
+Version 2.0 replaced the earlier Python/rumps app (still in git history before `swift-native`).
+It dropped the Claude browser-cookie fallback and the GitHub release check.
 
 ## Credits
 
-- [`BOUSHABAMohammed/claude-bar`](https://github.com/BOUSHABAMohammed/claude-bar)
-- [`steipete/CodexBar`](https://github.com/steipete/CodexBar)
+- [`BOUSHABAMohammed/claude-bar`](https://github.com/BOUSHABAMohammed/claude-bar), the original Python app
+- [`steipete/CodexBar`](https://github.com/steipete/CodexBar), for the Codex and OpenCode Go endpoints
 - DeepSeek logo from [`lobehub/lobe-icons`](https://github.com/lobehub/lobe-icons) (MIT)
 
 ## License

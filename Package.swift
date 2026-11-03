@@ -1,11 +1,22 @@
-// swift-tools-version:5.9
-// Native launcher for the Python menu-bar app (see Sources/LLMUsage/main.swift).
+// swift-tools-version:6.2
 import PackageDescription
 
 let package = Package(
     name: "LLMUsage",
-    platforms: [.macOS(.v13)],
+    platforms: [.macOS(.v26)],
     targets: [
-        .executableTarget(name: "LLMUsage", path: "Sources/LLMUsage")
+        // Provider fetching and parsing: no AppKit, unit-tested.
+        .target(name: "LLMUsageCore", path: "Sources/LLMUsageCore"),
+        // Menu-bar app: status item + SwiftUI panel.
+        .executableTarget(
+            name: "LLMUsage",
+            dependencies: ["LLMUsageCore"],
+            path: "Sources/LLMUsage"
+        ),
+        .testTarget(
+            name: "LLMUsageCoreTests",
+            dependencies: ["LLMUsageCore"],
+            path: "Tests/LLMUsageCoreTests"
+        ),
     ]
 )
