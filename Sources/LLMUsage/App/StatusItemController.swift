@@ -85,11 +85,8 @@ final class StatusItemController: NSObject {
                 self?.resizePanel(to: size)
             })
             host.autoresizingMask = [.width, .height]
-            if let glass = panel.contentView as? NSGlassEffectView {
-                glass.contentView = host
-            } else {
-                panel.contentView?.addSubview(host)
-            }
+            host.frame = panel.contentView?.bounds ?? .zero
+            panel.contentView?.addSubview(host)
             panelHost = host
             panelSize = host.fittingSize
         }
@@ -124,14 +121,13 @@ final class StatusItemController: NSObject {
     }
 
     private func makePanel() -> NSPanel {
-        let panel = NSPanel(
+        // Borderless: no hidden title bar, so no safe-area inset to throw off the sizing.
+        let panel = KeyablePanel(
             contentRect: NSRect(origin: .zero, size: panelSize),
-            styleMask: [.titled, .nonactivatingPanel, .utilityWindow, .fullSizeContentView],
+            styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
-        panel.titleVisibility = .hidden
-        panel.titlebarAppearsTransparent = true
         panel.isFloatingPanel = true
         panel.level = .statusBar
         panel.becomesKeyOnlyIfNeeded = true
@@ -141,14 +137,17 @@ final class StatusItemController: NSObject {
         panel.hidesOnDeactivate = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.isMovable = false
-        for button in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
-            panel.standardWindowButton(button)?.isHidden = true
-        }
-        let glass = NSGlassEffectView(frame: NSRect(origin: .zero, size: panelSize))
-        glass.style = .regular
-        glass.cornerRadius = 16
-        glass.autoresizingMask = [.width, .height]
-        panel.contentView = glass
+        // The system menu material: opaque enough to stay readable over busy windows
+        // (clear Liquid Glass let the content behind wash out the numbers).
+        let background = NSVisualEffectView(frame: NSRect(origin: .zero, size: panelSize))
+        background.material = .menu
+        background.blendingMode = .behindWindow
+        background.state = .active
+        background.wantsLayer = true
+        background.layer?.cornerRadius = 12
+        background.layer?.masksToBounds = true
+        background.autoresizingMask = [.width, .height]
+        panel.contentView = background
         return panel
     }
 
@@ -170,6 +169,11 @@ final class StatusItemController: NSObject {
         globalMonitor = nil
         localMonitor = nil
     }
+}
+
+/// Borderless panels can't take keyboard focus by default; this one needs it for Esc.
+final class KeyablePanel: NSPanel {
+    override var canBecomeKey: Bool { true }
 }
 
 /// Lets clicks fall through to the status-bar button underneath.

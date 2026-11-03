@@ -23,10 +23,10 @@ struct UsagePanel: View {
         .padding(.horizontal, 16)
         .padding(.top, 16)
         .padding(.bottom, 10)
-        .frame(width: 300)
+        .frame(width: 330)
         .fixedSize(horizontal: false, vertical: true)
-        // The panel's hidden title bar would otherwise push everything down.
-        .ignoresSafeArea()
+        // Damp whatever is behind the panel so the numbers stay crisp (adapts to light/dark).
+        .background(Color(nsColor: .windowBackgroundColor).opacity(0.75))
         .onGeometryChange(for: CGSize.self) { $0.size } action: { onSizeChange($0) }
     }
 
@@ -40,8 +40,8 @@ struct UsagePanel: View {
                          : "Updated \(last.formatted(.relative(presentation: .named, unitsStyle: .abbreviated)))")
                 }
             }
-            .font(.caption2)
-            .foregroundStyle(.tertiary)
+            .font(.system(size: 11))
+            .foregroundStyle(.secondary)
             Spacer()
             Button {
                 Task { await store.refresh() }
@@ -64,13 +64,13 @@ private struct ProviderSection: View {
     let now: Date
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 7) {
                 ProviderIconView(provider: provider)
-                    .frame(width: 15, height: 15)
+                    .frame(width: 16, height: 16)
                     .foregroundStyle(provider.accent)
                 Text(provider.displayName)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 14, weight: .bold))
                 Spacer()
                 if let detail {
                     Text(detail)
@@ -112,21 +112,19 @@ private struct UsageRow: View {
     let now: Date
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             Text(label)
-                .font(.system(size: 11, weight: .medium).monospacedDigit())
-                .foregroundStyle(.secondary)
-                .frame(width: 20, alignment: .leading)
-            UsageBar(fraction: (window?.percent ?? 0) / 100, color: barColor)
-                .frame(height: 7)
+                .foregroundStyle(.primary.opacity(0.75))
+                .frame(width: 24, alignment: .leading)
             Text(UsageFormat.percent(window?.percent))
-                .font(.system(size: 12, weight: .semibold).monospacedDigit())
-                .frame(width: 36, alignment: .trailing)
+                .fontWeight(.semibold)
+                .frame(width: 40, alignment: .trailing)
+            UsageBar(fraction: (window?.percent ?? 0) / 100, color: barColor)
+                .frame(height: 8)
             Text(UsageFormat.countdown(to: window?.resetsAt, now: now) ?? "")
-                .font(.system(size: 11).monospacedDigit())
-                .foregroundStyle(.secondary)
-                .frame(width: 52, alignment: .trailing)
+                .frame(width: 64, alignment: .trailing)
         }
+        .font(.system(size: 13, design: .monospaced))
     }
 
     private var barColor: Color {
@@ -145,7 +143,7 @@ private struct UsageBar: View {
         GeometryReader { geo in
             let clamped = max(0, min(1, fraction))
             ZStack(alignment: .leading) {
-                Capsule().fill(.primary.opacity(0.16))
+                Capsule().fill(.primary.opacity(0.18))
                 if clamped > 0 {
                     Capsule()
                         .fill(color.gradient)
