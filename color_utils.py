@@ -20,6 +20,7 @@ class ColorKey(str, Enum):
     ERROR = "error"
     CODEX_ACCENT = "codex_accent"
     CLAUDE_ACCENT = "claude_accent"
+    OPENCODE_ACCENT = "opencode_accent"
 
 
 PROGRESS_WIDTH = 16
@@ -30,6 +31,7 @@ _HEX: dict[ColorKey, str] = {
     ColorKey.ERROR:         "#F44747",
     ColorKey.CODEX_ACCENT:  "#7BA3CD",
     ColorKey.CLAUDE_ACCENT: "#C68870",
+    ColorKey.OPENCODE_ACCENT: "#6E85F7",
 }
 
 

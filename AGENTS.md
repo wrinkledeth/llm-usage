@@ -2,8 +2,8 @@
 
 ## Project Structure & Module Organization
 - `claude_bar.py` is the menu bar entrypoint and UI coordinator. Keep AppKit updates on the main thread and push network or CLI work into background threads.
-- Provider-specific logic lives beside the app: `codex_usage.py` handles Codex OAuth and app-server fallback, `color_utils.py` owns attributed menu styling, `status_image.py` renders the compact menu bar image, and `repo_metadata.py` resolves repo/update metadata.
-- Put automated tests in `tests/`. Static assets such as the Claude icon and screenshots stay at the repo root unless a dedicated `assets/` directory is introduced.
+- Provider-specific logic lives beside the app: `codex_usage.py` handles Codex OAuth and app-server fallback, `opencode_usage.py` reads OpenCode Go quotas with the Pi/OpenCode API key, `color_utils.py` owns attributed menu styling, `status_image.py` renders the compact menu bar image, and `repo_metadata.py` resolves repo/update metadata.
+- Put automated tests in `tests/`. Static assets such as the provider icons and screenshots stay at the repo root (new icons must also be added to `PREBUILD` in `macapp.conf`, or they won't ship in the app). macOS's SVG renderer can't parse packed arc flags, so write icon SVG paths with spaced flags unless a dedicated `assets/` directory is introduced.
 
 ## Build, Test, and Development Commands
 - `uv sync --frozen --no-dev`: create the local virtualenv and install runtime dependencies.

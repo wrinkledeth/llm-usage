@@ -18,8 +18,13 @@ from AppKit import (
 
 from usage_models import ProviderUsageSnapshot
 
-CLAUDE_ICON_PATH = pathlib.Path(__file__).parent / "icons8-claude-ai-96.png"
-CODEX_ICON_PATH = pathlib.Path(__file__).parent / "openai-codex-icon.svg"
+_HERE = pathlib.Path(__file__).parent
+# Left-to-right order of providers in the menu bar.
+ICON_PATHS = {
+    "codex": _HERE / "openai-codex-icon.svg",
+    "claude": _HERE / "icons8-claude-ai-96.png",
+    "opencode": _HERE / "deepseek-icon.svg",
+}
 # Match the actual menu bar thickness so the stacked text can be centered
 # within the full control instead of getting clipped against a shorter view.
 STATUS_HEIGHT = NSStatusBar.systemStatusBar().thickness()
@@ -32,24 +37,19 @@ SIDE_PADDING = 1.0
 TOP_TEXT_Y = 9.25
 BOTTOM_TEXT_Y = -0.5
 VALUE_FONT = NSFont.monospacedDigitSystemFontOfSize_weight_(9.5, 0.0)
-_CLAUDE_ICON: NSImage | None = None
-_CODEX_ICON: NSImage | None = None
+_ICONS: dict[str, NSImage] = {}
 
 
-def status_item_size(show_summary: bool) -> tuple[float, float]:
+def status_item_size(show_summary: bool, provider_count: int = 2) -> tuple[float, float]:
     provider_width = _provider_width(show_summary)
-    width = SIDE_PADDING * 2 + provider_width * 2 + PROVIDER_GAP
+    count = max(provider_count, 1)
+    width = SIDE_PADDING * 2 + provider_width * count + PROVIDER_GAP * (count - 1)
     return width, STATUS_HEIGHT
 
 
-def provider_specs(
-    codex_snapshot: ProviderUsageSnapshot | None,
-    claude_snapshot: ProviderUsageSnapshot | None,
-) -> list[dict[str, object]]:
-    return [
-        _provider_spec(codex_snapshot, "codex"),
-        _provider_spec(claude_snapshot, "claude"),
-    ]
+def provider_specs(snapshots: dict[str, ProviderUsageSnapshot | None]) -> list[dict[str, object]]:
+    """Specs for the providers to draw, in menu-bar order; omit a provider to hide it."""
+    return [_provider_spec(snapshots[pid], pid) for pid in ICON_PATHS if pid in snapshots]
 
 
 class PassthroughView(NSView):
@@ -67,7 +67,8 @@ class StatusBarContentView(PassthroughView):
         self._show_summary = True
         self._icon_views: dict[str, NSImageView] = {}
 
-        for provider_id, icon in (("codex", _codex_icon()), ("claude", _claude_icon())):
+        for provider_id in ICON_PATHS:
+            icon = _icon(provider_id)
             icon_view = NSImageView.alloc().initWithFrame_(((0.0, 0.0), (ICON_DRAW_SIZE, ICON_DRAW_SIZE)))
             icon_view.setImageScaling_(NSImageScaleProportionallyUpOrDown)
             if icon is not None:
@@ -83,6 +84,9 @@ class StatusBarContentView(PassthroughView):
         self._show_summary = show_summary
 
         provider_width = _provider_width(show_summary)
+        shown = {str(spec["provider_id"]) for spec in providers}
+        for provider_id, icon_view in self._icon_views.items():
+            icon_view.setHidden_(provider_id not in shown)
         x = SIDE_PADDING
         for spec in providers:
             provider_id = str(spec["provider_id"])
@@ -91,7 +95,7 @@ class StatusBarContentView(PassthroughView):
             icon_view.setContentTintColor_(_render_color(bool(spec["dimmed"])))
             x += provider_width + PROVIDER_GAP
 
-        width, height = status_item_size(show_summary)
+        width, height = status_item_size(show_summary, len(providers))
         self.setFrameSize_((width, height))
         self.setNeedsDisplay_(True)
 
@@ -136,32 +140,18 @@ def _render_color(dimmed: bool) -> NSColor:
     return base
 
 
-def _claude_icon() -> NSImage | None:
-    global _CLAUDE_ICON
-    if _CLAUDE_ICON is not None:
-        return _CLAUDE_ICON
-    if not CLAUDE_ICON_PATH.exists():
+def _icon(provider_id: str) -> NSImage | None:
+    if provider_id in _ICONS:
+        return _ICONS[provider_id]
+    path = ICON_PATHS[provider_id]
+    if not path.exists():
         return None
-    icon = NSImage.alloc().initByReferencingFile_(str(CLAUDE_ICON_PATH))
+    icon = NSImage.alloc().initByReferencingFile_(str(path))
     if icon is None:
         return None
     icon.setTemplate_(True)
-    _CLAUDE_ICON = icon
-    return _CLAUDE_ICON
-
-
-def _codex_icon() -> NSImage | None:
-    global _CODEX_ICON
-    if _CODEX_ICON is not None:
-        return _CODEX_ICON
-    if not CODEX_ICON_PATH.exists():
-        return None
-    icon = NSImage.alloc().initByReferencingFile_(str(CODEX_ICON_PATH))
-    if icon is None:
-        return None
-    icon.setTemplate_(True)
-    _CODEX_ICON = icon
-    return _CODEX_ICON
+    _ICONS[provider_id] = icon
+    return icon
 
 
 def _attributed_text(text: str, dimmed: bool) -> NSAttributedString:

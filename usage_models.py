@@ -30,6 +30,7 @@ class ProviderUsageSnapshot:
     session: UsageWindowSnapshot | None
     weekly: UsageWindowSnapshot | None
     credits: CreditsSnapshot | None = None
+    monthly: UsageWindowSnapshot | None = None
     error: str | None = None
     last_updated: dt.datetime | None = None
 

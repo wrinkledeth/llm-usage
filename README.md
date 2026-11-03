@@ -1,6 +1,6 @@
 # LLM Usage
 
-Compact macOS menu bar app for Claude and Codex usage. It shows Codex on the left, Claude on the right, with stacked `5h` and `7d` percentages.
+Compact macOS menu bar app for Codex, Claude and OpenCode Go usage, shown left to right with stacked `5h` and `7d` percentages. The dropdown also has OpenCode Go's monthly cap.
 
 ![](image-1.png)
 
@@ -36,12 +36,16 @@ ity
 - Claude usage is fetched from the authenticated Claude Code CLI's zero-token
   `/usage` command. A local `claude.ai` browser session is retained as a fallback.
 - Codex usage is fetched from local Codex auth in `~/.codex/auth.json` or `$CODEX_HOME/auth.json`, with `codex app-server` fallback when needed.
-- Credentials stay local and are only used to call Claude/OpenAI endpoints directly.
+- OpenCode Go usage comes from `https://opencode.ai/zen/go/v1/usage`, using the Go API key from
+  `OPENCODE_API_KEY`, Pi's `~/.pi/agent/auth.json`, or OpenCode's `~/.local/share/opencode/auth.json`
+  (`opencode-go` entry). Without a key the OpenCode Go section is hidden.
+- Credentials stay local and are only used to call Claude/OpenAI/OpenCode endpoints directly.
 
 ## Credits
 
 - [`BOUSHABAMohammed/claude-bar`](https://github.com/BOUSHABAMohammed/claude-bar)
 - [`steipete/CodexBar`](https://github.com/steipete/CodexBar)
+- DeepSeek logo from [`lobehub/lobe-icons`](https://github.com/lobehub/lobe-icons) (MIT)
 
 ## License
 

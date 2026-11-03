@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Claude + Codex usage macOS menu bar app."""
+"""Claude, Codex and OpenCode Go usage macOS menu bar app."""
 
 import argparse
 import datetime
@@ -18,6 +18,7 @@ from PyObjCTools.AppHelper import callAfter
 from claude_cookie import get_claude_session_cookie
 from claude_usage import load_claude_cli_snapshot
 from codex_usage import load_codex_snapshot
+from opencode_usage import OpenCodeAuthNotFoundError, load_opencode_snapshot
 from color_utils import (
     ColorKey,
     make_plain,
@@ -193,7 +194,7 @@ def build_claude_snapshot(data: dict) -> ProviderUsageSnapshot:
 
 class ClaudeBar(rumps.App):
     def __init__(self, browser: str | None = None):
-        super().__init__("Claude + Codex", "…")
+        super().__init__("LLM Usage", "…")
         self._browser = browser
         self._github_repo = resolve_github_repo(REPO_ROOT)
         self._build_menu_items()
@@ -215,6 +216,12 @@ class ClaudeBar(rumps.App):
         self.claude_weekly_row = self._display_item("  …")
         self.claude_detail_row = self._display_item("  …")
 
+        self.opencode_hdr = self._display_item("◆ OpenCode Go")
+        self.opencode_session_row = self._display_item("  …")
+        self.opencode_weekly_row = self._display_item("  …")
+        self.opencode_monthly_row = self._display_item("  …")
+        self.opencode_detail_row = self._display_item("  …")
+
         self.refresh_btn = rumps.MenuItem("Refresh", callback=self.on_refresh)
         self.update_item = rumps.MenuItem("  Update available", callback=self.on_open_update)
 
@@ -231,7 +238,26 @@ class ClaudeBar(rumps.App):
             self.claude_weekly_row,
             self.claude_detail_row,
             None,
+            self.opencode_hdr,
+            self.opencode_session_row,
+            self.opencode_weekly_row,
+            self.opencode_monthly_row,
+            self.opencode_detail_row,
+            None,
             self.update_item,
+        ]
+        # The separator above the OpenCode section, hidden along with it.
+        ns_menu = self.menu._menu
+        self._opencode_separator = ns_menu.itemAtIndex_(ns_menu.indexOfItem_(self.opencode_hdr._menuitem) - 1)
+        self._opencode_items = [
+            self._opencode_separator,
+            *(item._menuitem for item in (
+                self.opencode_hdr,
+                self.opencode_session_row,
+                self.opencode_weekly_row,
+                self.opencode_monthly_row,
+                self.opencode_detail_row,
+            )),
         ]
 
     def _display_item(self, title: str) -> rumps.MenuItem:
@@ -249,13 +275,27 @@ class ClaudeBar(rumps.App):
         self._status_item_ready = False
         self._codex_snapshot: ProviderUsageSnapshot | None = None
         self._claude_snapshot: ProviderUsageSnapshot | None = None
+        # None until a Go API key is found; the section stays hidden without one.
+        self._opencode_snapshot: ProviderUsageSnapshot | None = None
         self._update_url = github_releases_url(self._github_repo)
         self.codex_detail_row.hidden = True
         self.claude_detail_row.hidden = True
+        self._set_opencode_visible(False)
+
+    def _set_opencode_visible(self, visible: bool):
+        for item in self._opencode_items:
+            item.setHidden_(not visible)
 
     def _apply_section_headers(self):
         set_menu_title(self.codex_hdr, make_section_header("Codex", ColorKey.CODEX_ACCENT))
         set_menu_title(self.claude_hdr, make_section_header("Claude", ColorKey.CLAUDE_ACCENT))
+        set_menu_title(self.opencode_hdr, make_section_header("OpenCode Go", ColorKey.OPENCODE_ACCENT))
+
+    def _status_snapshots(self) -> dict[str, ProviderUsageSnapshot | None]:
+        snapshots = {"codex": self._codex_snapshot, "claude": self._claude_snapshot}
+        if self._opencode_snapshot is not None:
+            snapshots["opencode"] = self._opencode_snapshot
+        return snapshots
 
     def _setup_status_item(self, timer):
         timer.stop()
@@ -273,12 +313,10 @@ class ClaudeBar(rumps.App):
             return
 
         self._ensure_status_view()
-        width, height = status_item_size(self._show_summary)
+        specs = provider_specs(self._status_snapshots())
+        width, height = status_item_size(self._show_summary, len(specs))
         button_height = button.bounds().size.height
-        self._status_view.apply_state(
-            provider_specs(self._codex_snapshot, self._claude_snapshot),
-            self._show_summary,
-        )
+        self._status_view.apply_state(specs, self._show_summary)
         status_view_y = max(0.0, (button_height - height) / 2)
         self._status_view.setFrame_(((0.0, status_view_y), (width, height)))
         status_item.setLength_(width)
@@ -294,7 +332,7 @@ class ClaudeBar(rumps.App):
         if button is None:
             return
 
-        width, height = status_item_size(self._show_summary)
+        width, height = status_item_size(self._show_summary, len(self._status_snapshots()))
         self._status_view = StatusBarContentView.alloc().initWithFrame_(((0.0, 0.0), (width, height)))
         button.addSubview_(self._status_view)
         status_item.setImage_(NSImage.alloc().init())
@@ -342,7 +380,8 @@ class ClaudeBar(rumps.App):
         try:
             claude_snapshot = self._load_claude_snapshot()
             codex_snapshot = self._load_codex_snapshot()
-            callAfter(self._apply_refresh_results, claude_snapshot, codex_snapshot)
+            opencode_snapshot = self._load_opencode_snapshot()
+            callAfter(self._apply_refresh_results, claude_snapshot, codex_snapshot, opencode_snapshot)
         finally:
             with self._refresh_lock:
                 self._refreshing = False
@@ -379,13 +418,24 @@ class ClaudeBar(rumps.App):
         except Exception as exc:
             return ProviderUsageSnapshot.error_state("codex", "Codex", _format_error(exc))
 
+    def _load_opencode_snapshot(self) -> ProviderUsageSnapshot | None:
+        """None when this machine has no OpenCode Go key (section hidden)."""
+        try:
+            return load_opencode_snapshot()
+        except OpenCodeAuthNotFoundError:
+            return None
+        except Exception as exc:
+            return ProviderUsageSnapshot.error_state("opencode", "OpenCode Go", _format_error(exc))
+
     def _apply_refresh_results(
         self,
         claude_snapshot: ProviderUsageSnapshot,
         codex_snapshot: ProviderUsageSnapshot,
+        opencode_snapshot: ProviderUsageSnapshot | None,
     ):
         self._claude_snapshot = claude_snapshot
         self._codex_snapshot = codex_snapshot
+        self._opencode_snapshot = opencode_snapshot
         self._render_provider_snapshot(
             snapshot=codex_snapshot,
             session_row=self.codex_session_row,
@@ -400,6 +450,16 @@ class ClaudeBar(rumps.App):
             detail_row=self.claude_detail_row,
             accent_color_key=ColorKey.CLAUDE_ACCENT,
         )
+        self._set_opencode_visible(opencode_snapshot is not None)
+        if opencode_snapshot is not None:
+            self._render_provider_snapshot(
+                snapshot=opencode_snapshot,
+                session_row=self.opencode_session_row,
+                weekly_row=self.opencode_weekly_row,
+                detail_row=self.opencode_detail_row,
+                accent_color_key=ColorKey.OPENCODE_ACCENT,
+                monthly_row=self.opencode_monthly_row,
+            )
         self._refresh_status_item()
 
     def _render_provider_snapshot(
@@ -409,6 +469,7 @@ class ClaudeBar(rumps.App):
         weekly_row: rumps.MenuItem,
         detail_row: rumps.MenuItem,
         accent_color_key: ColorKey,
+        monthly_row: rumps.MenuItem | None = None,
     ):
         self._render_window_row(
             session_row,
@@ -426,6 +487,15 @@ class ClaudeBar(rumps.App):
             failed=bool(snapshot.error),
             accent_color_key=accent_color_key,
         )
+        if monthly_row is not None:
+            self._render_window_row(
+                monthly_row,
+                snapshot.monthly,
+                label="mo",
+                is_weekly=True,
+                failed=bool(snapshot.error),
+                accent_color_key=accent_color_key,
+            )
 
         if snapshot.error:
             set_menu_title(detail_row, make_plain(f"  Error: {snapshot.error}", ColorKey.ERROR))
@@ -502,7 +572,7 @@ def _compact_duration(value: float, suffix: str) -> str:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Claude + Codex usage menu bar app")
+    parser = argparse.ArgumentParser(description="LLM usage menu bar app")
     parser.add_argument(
         "--browser",
         choices=list(BROWSERS),
