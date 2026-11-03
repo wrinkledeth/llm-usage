@@ -7,7 +7,7 @@
   `ProviderID.loadUsage()` is the single entry point per provider. Throw
   `UsageError.notConfigured` when a provider isn't set up on this Mac: the UI hides it.
 - `Sources/LLMUsage/`: the app. `App/UsageStore` (`@Observable`, parallel refresh, 5-min loop,
-  wake refresh), `App/StatusItemController` (NSStatusItem hosting `StatusLabel`; glass `NSPanel`
+  wake refresh), `App/StatusItemController` (NSStatusItem hosting `StatusLabel`; borderless menu-material `NSPanel`
   hosting `UsagePanel`), `UI/` SwiftUI views, `App/DebugPrint` (`--print`, `--snapshot DIR`).
 - `Resources/Icons/<provider id>.{svg,png}`: template logos, copied into the bundle by
   `RESOURCES` in `macapp.conf`. macOS's SVG renderer can't parse packed arc flags (`0 01-1.7`);
