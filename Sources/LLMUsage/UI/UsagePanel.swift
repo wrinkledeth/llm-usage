@@ -6,29 +6,32 @@ import SwiftUI
 struct UsagePanel: View {
     let store: UsageStore
     let onSizeChange: (CGSize) -> Void
-    @State private var openAtLogin = LaunchAtLogin.isEnabled
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 30)) { context in
-            VStack(alignment: .leading, spacing: 10) {
-                header(now: context.date)
-                ForEach(store.visibleProviders) { provider in
-                    ProviderCard(provider: provider, status: store.status(provider), now: context.date)
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(store.visibleProviders.enumerated()), id: \.element) { index, provider in
+                    if index > 0 {
+                        Divider().opacity(0.4).padding(.vertical, 12)
+                    }
+                    ProviderSection(provider: provider, status: store.status(provider), now: context.date)
                 }
-                footer
+                footer(now: context.date)
+                    .padding(.top, 14)
             }
         }
-        .padding(14)
-        .frame(width: 310)
+        .padding(.horizontal, 16)
+        .padding(.top, 16)
+        .padding(.bottom, 10)
+        .frame(width: 300)
         .fixedSize(horizontal: false, vertical: true)
+        // The panel's hidden title bar would otherwise push everything down.
+        .ignoresSafeArea()
         .onGeometryChange(for: CGSize.self) { $0.size } action: { onSizeChange($0) }
-        .onAppear { openAtLogin = LaunchAtLogin.isEnabled }
     }
 
-    private func header(now: Date) -> some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text("LLM Usage").font(.headline)
-            Spacer()
+    private func footer(now: Date) -> some View {
+        HStack(spacing: 6) {
             Group {
                 if store.isRefreshing {
                     Text("Refreshing…")
@@ -37,54 +40,40 @@ struct UsagePanel: View {
                          : "Updated \(last.formatted(.relative(presentation: .named, unitsStyle: .abbreviated)))")
                 }
             }
-            .font(.caption)
-            .foregroundStyle(.secondary)
+            .font(.caption2)
+            .foregroundStyle(.tertiary)
+            Spacer()
             Button {
                 Task { await store.refresh() }
             } label: {
                 Image(systemName: "arrow.clockwise")
+                    .font(.caption.weight(.medium))
                     .symbolEffect(.rotate, isActive: store.isRefreshing)
             }
             .buttonStyle(.borderless)
+            .foregroundStyle(.secondary)
             .disabled(store.isRefreshing)
             .help("Refresh")
         }
     }
-
-    private var footer: some View {
-        HStack {
-            Toggle("Open at Login", isOn: $openAtLogin)
-                .toggleStyle(.checkbox)
-                .onChange(of: openAtLogin) { _, enabled in
-                    LaunchAtLogin.set(enabled)
-                    openAtLogin = LaunchAtLogin.isEnabled
-                }
-            Spacer()
-            Button("Quit") { NSApp.terminate(nil) }
-                .buttonStyle(.borderless)
-                .keyboardShortcut("q")
-        }
-        .font(.caption)
-        .padding(.top, 2)
-    }
 }
 
-private struct ProviderCard: View {
+private struct ProviderSection: View {
     let provider: ProviderID
     let status: ProviderStatus
     let now: Date
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 7) {
                 ProviderIconView(provider: provider)
-                    .frame(width: 14, height: 14)
+                    .frame(width: 15, height: 15)
                     .foregroundStyle(provider.accent)
-                Text(provider.displayName).font(.subheadline.weight(.semibold))
+                Text(provider.displayName)
+                    .font(.system(size: 13, weight: .semibold))
                 Spacer()
-                if let credits = status.snapshot?.credits {
-                    Text(credits.unlimited ? "Credits: unlimited"
-                         : credits.balance.map { "Credits: \($0.formatted(.currency(code: "USD")))" } ?? "Credits")
+                if let detail {
+                    Text(detail)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -100,15 +89,19 @@ private struct ProviderCard: View {
             if let error = status.error {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
                     .font(.caption)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(.orange)
                     .lineLimit(3)
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
             }
         }
-        .padding(10)
-        .background(.fill.quaternary, in: .rect(cornerRadius: 10))
-        .opacity(status.snapshot == nil && status.error == nil ? 0.6 : 1)
+        .opacity(status.snapshot == nil && status.error == nil ? 0.5 : 1)
+    }
+
+    private var detail: String? {
+        guard let credits = status.snapshot?.credits else { return nil }
+        if credits.unlimited { return "Unlimited credits" }
+        return credits.balance.map { "\($0.formatted(.currency(code: "USD").precision(.fractionLength(0...2)))) credits" }
     }
 }
 
@@ -119,24 +112,28 @@ private struct UsageRow: View {
     let now: Date
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 10) {
             Text(label)
+                .font(.system(size: 11, weight: .medium).monospacedDigit())
                 .foregroundStyle(.secondary)
-                .frame(width: 22, alignment: .leading)
+                .frame(width: 20, alignment: .leading)
             UsageBar(fraction: (window?.percent ?? 0) / 100, color: barColor)
-                .frame(height: 6)
+                .frame(height: 7)
             Text(UsageFormat.percent(window?.percent))
-                .frame(width: 34, alignment: .trailing)
-            Text(UsageFormat.countdown(to: window?.resetsAt, now: now) ?? "–")
+                .font(.system(size: 12, weight: .semibold).monospacedDigit())
+                .frame(width: 36, alignment: .trailing)
+            Text(UsageFormat.countdown(to: window?.resetsAt, now: now) ?? "")
+                .font(.system(size: 11).monospacedDigit())
                 .foregroundStyle(.secondary)
-                .frame(width: 50, alignment: .trailing)
+                .frame(width: 52, alignment: .trailing)
         }
-        .font(.caption.monospacedDigit())
     }
 
     private var barColor: Color {
         guard let percent = window?.percent else { return accent }
-        return percent >= 90 ? .red : accent
+        if percent >= 90 { return .red }
+        if percent >= 75 { return .orange }
+        return accent
     }
 }
 
@@ -146,11 +143,14 @@ private struct UsageBar: View {
 
     var body: some View {
         GeometryReader { geo in
+            let clamped = max(0, min(1, fraction))
             ZStack(alignment: .leading) {
-                Capsule().fill(.quaternary)
-                Capsule()
-                    .fill(color.gradient)
-                    .frame(width: max(0, min(1, fraction)) * geo.size.width)
+                Capsule().fill(.primary.opacity(0.16))
+                if clamped > 0 {
+                    Capsule()
+                        .fill(color.gradient)
+                        .frame(width: max(geo.size.height, clamped * geo.size.width))
+                }
             }
         }
         .animation(.smooth, value: fraction)

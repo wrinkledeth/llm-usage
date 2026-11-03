@@ -7,7 +7,7 @@ struct StatusLabel: View {
     let onSizeChange: (CGSize) -> Void
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 6) {
             ForEach(store.visibleProviders) { provider in
                 let status = store.status(provider)
                 HStack(spacing: 1.5) {

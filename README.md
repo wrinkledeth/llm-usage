@@ -3,7 +3,8 @@
 Native macOS menu-bar app (Swift 6 / SwiftUI, macOS 26) showing subscription usage for
 **Codex**, **Claude** and **OpenCode Go**. Each provider gets its logo with the 5-hour window
 stacked over the weekly one; click for a panel with progress bars, reset countdowns, OpenCode
-Go's monthly cap and Codex credits. Right-click for Refresh / Quit.
+Go's monthly cap and Codex credits. Right-click for Refresh / Quit; Esc or a click elsewhere
+closes the panel.
 
 It refreshes every 5 minutes, after the Mac wakes, and when the panel opens with data older
 than a minute. A provider that isn't set up on this Mac is hidden; one that fails keeps its last
@@ -15,7 +16,7 @@ reading (dimmed) and shows the error in the panel.
 macapp install    # → /Applications/LLM Usage.app
 ```
 
-It registers as a login item on first launch (toggle in the panel). Errors go to
+It always opens at login: every launch re-registers it as a login item. Errors go to
 `~/Library/Logs/LLM Usage.log`.
 
 If a per-app firewall such as LuLu is running, allow **LLM Usage** to connect out. Menu-bar

@@ -17,7 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         Log.write("started \(Bundle.main.shortVersion)")
-        LaunchAtLogin.migrateOnFirstRun()
+        LaunchAtLogin.ensureEnabled()
 
         let controller = StatusItemController(store: store)
         controller.start()
